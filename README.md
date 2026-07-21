@@ -1,11 +1,17 @@
 # Git As Database
 
-目前实现的wiki储存功能Story
-Story 是一个基于 Git hooks 的工程记忆工具。
+Git As Database 当前实现的是 Story：一个基于 Git hooks 的工程记忆工具。
 
 它的目标是：开发者继续使用原生 `git commit`、`git commit --amend`、
 `git rebase`、`git cherry-pick`，Story 在提交时自动把本次编码会话证据绑定到
 commit，并把可迁移、可追溯的工程记忆写入仓库自己的 checkpoint ref。
+
+简单说，Story 把 Git 当作一个可迁移的工程记忆数据库：
+
+- 业务代码仍然走正常分支，例如 `main`、`feature/order-flow`
+- 工程记忆写入专用 ref：`refs/heads/story/checkpoints/v1`
+- 业务分支 push 到远端时，Story 自动把 checkpoint ref 同步到同一个 remote
+- 团队成员 clone / fetch 后，可以按 commit 追溯当时的对话、决策和证据
 
 ## 1. Story 解决什么问题
 
@@ -24,8 +30,9 @@ Story 提供一条尽量不打断开发流的路径：
 1. 在提交前准备或发现会话证据
 2. `git commit` 时自动注入 Story trailers
 3. `post-commit` 自动把证据固化到 checkpoint ref
-4. 后续按 commit 查看会话、生成 review、生成 handoff
-5. amend / rewrite 后继续保留逻辑绑定与 lineage
+4. `pre-push` 自动把 checkpoint ref 推送到业务代码同一个 remote
+5. 后续按 commit 查看会话、生成 review、生成 handoff
+6. amend / rewrite 后继续保留逻辑绑定与 lineage
 
 ## 2. 当前能力
 
@@ -78,6 +85,15 @@ story enable
 - `post-commit`
 - `post-rewrite`
 - `pre-push`
+
+每个 hook 的职责如下：
+
+| Hook | 触发时机 | Story 行为 |
+| --- | --- | --- |
+| `commit-msg` | Git 生成 commit message 前 | 注入 `Story-Checkpoint`、`Story-Session` 等 trailers |
+| `post-commit` | commit 成功后 | 把 transcript、metadata、review/handoff 索引写入 checkpoint ref |
+| `post-rewrite` | amend / rebase / cherry-pick rewrite 后 | 记录 old commit 到 new commit 的 lineage |
+| `pre-push` | `git push` 真正发送对象前 | 把 `refs/heads/story/checkpoints/v1` 同步到同一个 remote |
 
 如果仓库原本已有 hook，Story 会把它们备份到 `.story/hooks/original/`，
 然后以链式方式继续调用，不直接粗暴覆盖原逻辑。
@@ -161,13 +177,32 @@ git commit -m "feat: wire story codex session discovery"
 如果当前没有手动 attach 的 session，`commit-msg` hook 会自动尝试发现符合条件的
 Codex sessions，并把它们关联进这次提交。
 
-### 6.3 查看当前提交的证据
+### 6.3 push 业务代码并同步 Story 证据
+
+安装 Story hooks 后，正常 push 业务分支即可：
+
+```bash
+git push origin feature/my-work
+```
+
+这次 push 会触发 `pre-push` hook。Story 会额外执行一次 checkpoint ref 同步：
+
+```bash
+git push origin refs/heads/story/checkpoints/v1:refs/heads/story/checkpoints/v1
+```
+
+因此远端会同时拥有：
+
+- 你的业务分支，例如 `refs/heads/feature/my-work`
+- Story 证据分支：`refs/heads/story/checkpoints/v1`
+
+### 6.4 查看当前提交的证据
 
 ```bash
 story checkpoint show --commit HEAD --json
 ```
 
-### 6.4 生成 review / handoff
+### 6.5 生成 review / handoff
 
 ```bash
 story review generate --commit HEAD --json
@@ -299,7 +334,9 @@ story session list-codex --branch <branch> --json
 
 ## 10. 提交时会发生什么
 
-Story 的核心链路如下：
+Story 的核心链路分为“提交阶段”和“推送阶段”。
+
+提交阶段：
 
 ```text
 manual attach or Codex branch binding
@@ -318,15 +355,23 @@ git commit creates commit
 post-commit:
   - finalize checkpoint
   - write evidence into refs/heads/story/checkpoints/v1
+```
+
+推送阶段：
+
+```text
+git push origin <business-branch>
                 |
                 v
 pre-push:
-  - when business code is pushed
-  - push refs/heads/story/checkpoints/v1 to the same remote
+  - receive remote name from Git
+  - check local refs/heads/story/checkpoints/v1
+  - push checkpoint ref to the same remote
                 |
                 v
-post-rewrite:
-  - record old/new commit lineage
+remote:
+  - receives business branch
+  - receives story/checkpoints/v1
 ```
 
 ## 11. 数据存放位置
@@ -373,7 +418,15 @@ ref 内部包含：
 ## 12. 与普通 Git 协作
 
 启用 Story hooks 后，业务分支执行 `git push <remote> <branch>` 时，
-`pre-push` hook 会自动把本地 checkpoint ref 同步到同一个 remote：
+`pre-push` hook 会自动把本地 checkpoint ref 同步到同一个 remote。
+
+例如你执行：
+
+```bash
+git push origin feature/my-work
+```
+
+Story 会自动补充同步：
 
 ```text
 refs/heads/story/checkpoints/v1
@@ -394,6 +447,23 @@ git fetch origin refs/heads/story/checkpoints/v1:refs/heads/story/checkpoints/v1
 ```
 
 如果希望团队成员都能读到相同的工程记忆，需要确保远端保留这条 ref。
+
+### 12.1 如何确认远端已经有 Story 证据
+
+可以查看远端 ref：
+
+```bash
+git ls-remote origin refs/heads/story/checkpoints/v1
+```
+
+如果能看到一行 commit SHA 和 `refs/heads/story/checkpoints/v1`，说明 Story 证据已经同步到远端。
+
+也可以拉取后查看证据：
+
+```bash
+git fetch origin refs/heads/story/checkpoints/v1:refs/heads/story/checkpoints/v1
+story checkpoint list --json
+```
 
 ## 13. Rewrite 与 lineage
 
@@ -472,11 +542,11 @@ Story 当前自带这些配套 skills：
 
 其中 `add_session` 用来处理当前仓库的真实 Codex sessions，详细说明见：
 
-- [skills/add_session/USAGE.md](file:///Users/bytedance/Desktop/super/story/skills/add_session/USAGE.md)
+- [skills/add_session/USAGE.md](skills/add_session/USAGE.md)
 
 ## 16. 开发与验证
 
-在 `story/` 目录执行：
+在仓库根目录执行：
 
 ```bash
 npm test
