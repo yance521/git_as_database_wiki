@@ -1,5 +1,6 @@
-# Story
+# Git As Database
 
+目前实现的wiki储存功能Story
 Story 是一个基于 Git hooks 的工程记忆工具。
 
 它的目标是：开发者继续使用原生 `git commit`、`git commit --amend`、
