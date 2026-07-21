@@ -25,6 +25,7 @@ import { getStoryPaths } from "../core/paths.ts";
 import { readJson } from "../core/utils.ts";
 import { runCommitMsgHook } from "../hooks/commit-msg.ts";
 import { runPostCommitHook } from "../hooks/post-commit.ts";
+import { runPrePushHook } from "../hooks/pre-push.ts";
 import {
   installHooks,
   disableHooks,
@@ -147,6 +148,11 @@ export async function run(
     const input = await readStdin();
     await preloadRewriteMessages(repoRoot, input);
     return runPostRewriteHook(repoRoot, input, rest[0] ?? "unknown");
+  }
+  if (command === "hook" && subcommand === "pre-push") {
+    const remote = rest[0];
+    if (!remote) throw new Error("Usage: story hook pre-push <remote> [url]");
+    return runPrePushHook(repoRoot, remote);
   }
   if (command === "repair") {
     const repaired = await finalizeCheckpoint(repoRoot);

@@ -5,7 +5,7 @@ import { getStoryPaths } from "../core/paths.ts";
 import { ensureDir, writeJson } from "../core/utils.ts";
 
 const MANAGED_MARKER = "# story-managed-hook-v1";
-const HOOKS = ["commit-msg", "post-commit", "post-rewrite"] as const;
+const HOOKS = ["commit-msg", "post-commit", "post-rewrite", "pre-push"] as const;
 
 export async function installHooks(
   repoRoot: string,
@@ -118,7 +118,7 @@ function renderWrapper(
   return `#!/bin/sh
 ${MANAGED_MARKER}
 set -u
-if [ "\${STORY_INTERNAL_COMMIT:-0}" = "1" ]; then
+if [ "\${STORY_INTERNAL_COMMIT:-0}" = "1" ] || [ "\${STORY_SYNCING_CHECKPOINTS:-0}" = "1" ]; then
   exit 0
 fi
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
