@@ -1,13 +1,42 @@
 {
-  "name": "@story/engineering-memory",
+  "name": "@yance521/story",
   "version": "0.1.0",
-  "private": true,
+  "description": "Git hook based engineering memory stored in Git refs.",
+  "private": false,
   "type": "module",
+  "license": "Apache-2.0",
   "bin": {
-    "story": "./bin/story.js"
+    "story": "bin/story.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "skills",
+    "README.md",
+    "MIGRATION.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yance521/git_as_database_wiki.git"
+  },
+  "homepage": "https://github.com/yance521/git_as_database_wiki#readme",
+  "bugs": {
+    "url": "https://github.com/yance521/git_as_database_wiki/issues"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test",
-    "build": "node ./scripts/build.mjs"
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
   }
 }
