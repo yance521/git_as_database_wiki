@@ -1,0 +1,13 @@
+{
+  "name": "@story/engineering-memory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "story": "./bin/story.js"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test",
+    "build": "node ./scripts/build.mjs"
+  }
+}
